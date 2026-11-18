@@ -1,10 +1,17 @@
+import os
 from typing import List, Optional
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    # Local runs use .env by default. Set TRUHIRE_ENV_FILE=.env.production to load
+    # a separate local production-like config; real production should inject vars.
+    model_config = SettingsConfigDict(
+        env_file=os.getenv("TRUHIRE_ENV_FILE", ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     APP_NAME: str = "TruHire"
     APP_ENV: str = "development"
@@ -18,8 +25,18 @@ class Settings(BaseSettings):
     # PostgreSQL only, e.g. postgresql+psycopg://user:pass@localhost:5432/truhire
     # (URL-encode special characters in the password, e.g. "@" -> "%40"). Required, no default.
     DATABASE_URL: str
+    DATABASE_URL_UNPOOLED: Optional[str] = None
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 20
+
+    # Neon Object Storage uses its S3-compatible API. Keep its private credentials
+    # in environment variables; use local disk for development unless selected.
+    OBJECT_STORAGE_BACKEND: str = "local"
+    OBJECT_STORAGE_BUCKET: Optional[str] = None
+    AWS_ENDPOINT_URL_S3: Optional[str] = None
+    AWS_ACCESS_KEY_ID: Optional[str] = None
+    AWS_SECRET_ACCESS_KEY: Optional[str] = None
+    AWS_REGION: Optional[str] = None
 
     # Required, no default: a baked-in signing key in source would be a leaked secret.
     # Set in .env (generate with: python -c "import secrets; print(secrets.token_urlsafe(48))").
@@ -285,6 +302,19 @@ class Settings(BaseSettings):
     def _check_secrets(self):
         if not self.DATABASE_URL.startswith("postgresql"):
             raise ValueError("DATABASE_URL must be a PostgreSQL URL (postgresql+psycopg://user:pass@host:5432/db).")
+        if self.OBJECT_STORAGE_BACKEND.lower() not in ("local", "neon"):
+            raise ValueError("OBJECT_STORAGE_BACKEND must be 'local' or 'neon'.")
+        if self.OBJECT_STORAGE_BACKEND.lower() == "neon":
+            required_storage_values = {
+                "OBJECT_STORAGE_BUCKET": self.OBJECT_STORAGE_BUCKET,
+                "AWS_ENDPOINT_URL_S3": self.AWS_ENDPOINT_URL_S3,
+                "AWS_ACCESS_KEY_ID": self.AWS_ACCESS_KEY_ID,
+                "AWS_SECRET_ACCESS_KEY": self.AWS_SECRET_ACCESS_KEY,
+                "AWS_REGION": self.AWS_REGION,
+            }
+            missing = [name for name, value in required_storage_values.items() if not value]
+            if missing:
+                raise ValueError(f"Neon object storage is enabled but required settings are missing: {', '.join(missing)}")
         if self.APP_ENV.lower() not in ("development", "dev", "test") and len(self.SECRET_KEY) < 32:
             raise ValueError("SECRET_KEY must be at least 32 characters outside development.")
         return self

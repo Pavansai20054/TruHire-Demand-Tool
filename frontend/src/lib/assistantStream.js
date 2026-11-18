@@ -1,4 +1,5 @@
 import { STORAGE_KEYS } from '../config/env.js';
+import { API_BASE_URL } from './apiBase.js';
 
 // Splits buffered Server-Sent-Events text into complete {event, data} messages plus the unfinished tail.
 export function parseSse(buffer) {
@@ -22,7 +23,7 @@ export function parseSse(buffer) {
 // arriving, so this uses fetch.
 export async function streamAssistantMessage(body, onToken, signal) {
   const token = localStorage.getItem(STORAGE_KEYS.token);
-  const response = await fetch('/api/assistant/message/stream', {
+  const response = await fetch(`${API_BASE_URL}/assistant/message/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify(body),

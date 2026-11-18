@@ -2,6 +2,8 @@
 .env
 .env.*
 !.env.example
+!.env.production.example
+.neon-cli/
 
 # ---- Python ----
 __pycache__/
@@ -59,3 +61,4 @@ command.md
 
 # Sample resumes (personal data) are kept locally, not in the repo
 Resumes_*/
+.neon

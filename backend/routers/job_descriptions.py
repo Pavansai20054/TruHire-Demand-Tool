@@ -4,7 +4,6 @@ import os
 from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 from sqlalchemy.orm import Session
 
@@ -21,7 +20,7 @@ from backend.services.common import requirement_history as history
 from backend.services.common.cache import get_cache, set_cache, delete_cache, clear_cache, get_index_epoch
 from backend.services.classification import classify_jd_detailed
 from backend.services.ingestion.parsing import extract_text_from_file, is_supported_jd_file
-from backend.services.ingestion.storage import resolve_stored_file, save_upload_file
+from backend.services.ingestion.storage import save_upload_file, stored_file_exists, stored_file_response
 from backend.services.llm.ai_service import summarize_jd
 from backend.services.retrieval.filters import extract_jd_filters
 
@@ -407,7 +406,7 @@ def _checked_jd_file_url(file_url: Optional[str]) -> Optional[str]:
     # references to a file that actually exists in JD storage.
     if not file_url:
         return None
-    if not file_url.startswith("/uploads/job_descriptions/") or not resolve_stored_file(file_url):
+    if not file_url.startswith("/uploads/job_descriptions/") or not stored_file_exists(file_url):
         raise HTTPException(400, "Invalid requirement file reference.")
     return file_url
 
@@ -899,15 +898,10 @@ def get_job_description_search_filters(id: str, db: Session = Depends(get_db), u
 @router.get("/api/job-descriptions/{id}/file")
 def download_job_description_file(id: str, download: bool = False, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     pos = get_jd(id, db)
-    path = resolve_stored_file(pos.file_url)
-    if not path:
+    response = stored_file_response(pos.file_url, pos.original_filename, download)
+    if not response:
         raise HTTPException(404, "Requirement file not available.")
-    return FileResponse(
-        path,
-        filename=pos.original_filename or path.name,
-        content_disposition_type="attachment" if download else "inline",
-        headers={"Cache-Control": "private, no-store"},
-    )
+    return response
 
 
 @router.put("/api/job-descriptions/{id}", response_model=PositionResponse)

@@ -1,9 +1,10 @@
 import axios from 'axios';
 import { cachingAdapter, clearRequestCache } from './requestCache';
 import { STORAGE_KEYS, TIMEOUTS_MS } from '../config/env';
+import { API_BASE_URL } from './apiBase';
 
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: API_BASE_URL,
   timeout: TIMEOUTS_MS.default,
   adapter: cachingAdapter,
 });

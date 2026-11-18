@@ -3,7 +3,6 @@ from base64 import urlsafe_b64decode, urlsafe_b64encode
 import logging
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import or_, and_
 from sqlalchemy.orm import Session
@@ -14,7 +13,7 @@ from backend.services.common.payloads import candidate_payload
 from backend.services.retrieval.opensearch import delete_candidate as delete_lexical
 from backend.services.retrieval.qdrant import delete_candidate as delete_vector
 from backend.services.common.cache import get_cache, set_cache, delete_cache, clear_cache
-from backend.services.ingestion.storage import delete_file_by_url_or_path, resolve_stored_file
+from backend.services.ingestion.storage import delete_file_by_url_or_path, stored_file_response
 from backend.config import settings
 from backend.services.candidates.directory import filter_directory
 from backend.services.candidates.history import requirement_rows
@@ -132,15 +131,10 @@ def download_candidate_resume(id: str, download: bool = False, db: Session = Dep
     cand = db.query(Candidate).filter(Candidate.id == id).first()
     if not cand:
         raise HTTPException(status_code=404, detail="Candidate not found.")
-    path = resolve_stored_file(cand.resume_file_url)
-    if not path:
+    response = stored_file_response(cand.resume_file_url, cand.original_filename, download)
+    if not response:
         raise HTTPException(status_code=404, detail="Resume file not available.")
-    return FileResponse(
-        path,
-        filename=cand.original_filename or path.name,
-        content_disposition_type="attachment" if download else "inline",
-        headers={"Cache-Control": "private, no-store"},
-    )
+    return response
 
 
 @router.patch("/{id}/status")
@@ -244,8 +238,7 @@ def _remove_candidate(cand: Candidate, db: Session):
             delete_from_index(cand.id)
         except Exception:
             logger.exception("Could not remove candidate %s from %s; database deletion will continue", cand.id, index_name)
-    if resolve_stored_file(cand.resume_file_url):
-        delete_file_by_url_or_path(cand.resume_file_url)
+    delete_file_by_url_or_path(cand.resume_file_url)
     db.query(RequirementCandidateStatus).filter(RequirementCandidateStatus.candidate_id == cand.id).delete(synchronize_session=False)
     db.query(CandidateAssignment).filter(CandidateAssignment.candidate_id == cand.id).delete(synchronize_session=False)
     db.query(CandidateComment).filter(CandidateComment.candidate_id == cand.id).delete(synchronize_session=False)

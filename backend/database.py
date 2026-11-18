@@ -4,8 +4,17 @@ from backend.config import settings
 
 # PostgreSQL: pooled connections, validated before use so a restarted database server
 # does not surface as errors on the next requests.
+def _sqlalchemy_database_url(database_url: str) -> str:
+    """Select the installed psycopg 3 driver when Neon supplies a generic URL."""
+    if database_url.startswith("postgresql://"):
+        return database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    if database_url.startswith("postgres://"):
+        return database_url.replace("postgres://", "postgresql+psycopg://", 1)
+    return database_url
+
+
 engine = create_engine(
-    settings.DATABASE_URL,
+    _sqlalchemy_database_url(settings.DATABASE_URL),
     pool_size=settings.DB_POOL_SIZE,
     max_overflow=settings.DB_MAX_OVERFLOW,
     pool_pre_ping=True,
