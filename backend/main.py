@@ -20,10 +20,6 @@ logger = logging.getLogger(__name__)
 
 setup_logging()
 logger = logging.getLogger("truhire")
-ensure_schema()
-Path(settings.STORAGE_DIR).mkdir(parents=True, exist_ok=True)
-Path(settings.RESUME_STORAGE_DIR).mkdir(parents=True, exist_ok=True)
-Path(settings.JD_STORAGE_DIR).mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title=settings.APP_NAME, description="Enterprise AI-powered Hiring Platform", version="2.0.0")
 app.state.limiter = limiter
@@ -60,6 +56,17 @@ def _warm_models():
 @app.on_event("startup")
 async def startup_event():
     logger.info("TruHire starting (env=%s, reranker=%s, qdrant_quantization=%s, qdrant_on_disk=%s)", settings.APP_ENV, settings.RERANKER_MODEL if settings.RERANKER_ENABLED else "off", settings.QDRANT_QUANTIZATION, settings.QDRANT_ON_DISK)
+    try:
+        Path(settings.STORAGE_DIR).mkdir(parents=True, exist_ok=True)
+        Path(settings.RESUME_STORAGE_DIR).mkdir(parents=True, exist_ok=True)
+        Path(settings.JD_STORAGE_DIR).mkdir(parents=True, exist_ok=True)
+    except Exception as exc:
+        logger.warning(f"Storage dir creation note: {exc}")
+    try:
+        ensure_schema()
+        logger.info("Database schema initialized successfully.")
+    except Exception as exc:
+        logger.error(f"Database schema init note (will retry on query): {exc}")
     try:
         init_opensearch_index()
     except Exception as exc:
