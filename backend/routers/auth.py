@@ -74,7 +74,12 @@ async def login(request: Request, db: Session = Depends(get_db)):
     # Support both JSON payload and OAuth2 form-data
     content_type = request.headers.get("content-type", "")
     if "application/json" in content_type:
-        body = await request.json()
+        try:
+            body = await request.json()
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Request body is not valid JSON.")
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Request body must be a JSON object.")
         email = body.get("email", "").lower().strip()
         password = body.get("password", "")
     else:

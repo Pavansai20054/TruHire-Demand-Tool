@@ -302,6 +302,14 @@ class Settings(BaseSettings):
     def _check_secrets(self):
         if not self.DATABASE_URL.startswith("postgresql"):
             raise ValueError("DATABASE_URL must be a PostgreSQL URL (postgresql+psycopg://user:pass@host:5432/db).")
+        # Database by environment: development -> local Postgres, production -> Neon (cloud).
+        from urllib.parse import urlparse
+        db_host = (urlparse(self.DATABASE_URL).hostname or "").lower()
+        env_name = self.APP_ENV.lower()
+        if env_name == "production" and db_host in ("localhost", "127.0.0.1", "::1"):
+            raise ValueError("APP_ENV=production must use the Neon database, not a local one. Set DATABASE_URL to the Neon URL.")
+        if env_name in ("development", "dev") and db_host.endswith(".neon.tech"):
+            raise ValueError("APP_ENV=development must use the local database, not Neon. Point DATABASE_URL at local Postgres.")
         if self.OBJECT_STORAGE_BACKEND.lower() not in ("local", "neon"):
             raise ValueError("OBJECT_STORAGE_BACKEND must be 'local' or 'neon'.")
         if self.OBJECT_STORAGE_BACKEND.lower() == "neon":
