@@ -89,6 +89,10 @@ for router in (
 ):
     app.include_router(router)
 
+@app.get("/")
+def root():
+    return {"status": "healthy", "app": settings.APP_NAME, "environment": settings.APP_ENV}
+
 @app.get("/api/health")
 def health_check():
     return {"status": "healthy", "app": settings.APP_NAME, "environment": settings.APP_ENV}
