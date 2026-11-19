@@ -44,19 +44,54 @@ configuration (URLs and credentials in `.env`) — none of these are assumed to
 run on any particular host or port. Point them at whatever infrastructure you
 have available.
 
+## Environments
+
+TruHire has two runtime environments. Keep their credentials and data separate:
+
+| Area | Development and testing | Production |
+|---|---|---|
+| App mode | `APP_ENV=development` (CI uses `test`) | `APP_ENV=production` |
+| Web app / API | Vite and FastAPI locally, or the local Docker stack | Render frontend and backend services (as represented by the production environment configuration) |
+| PostgreSQL | Local PostgreSQL or Compose PostgreSQL; use a development database only | Neon PostgreSQL (`DATABASE_URL`; `DATABASE_URL_UNPOOLED` for direct/maintenance connections) |
+| Vector search | Local Qdrant container for Compose; Qdrant Cloud may be used for host-based development | Qdrant Cloud (`QDRANT_URL`, `QDRANT_API_KEY`) |
+| Lexical search | Local OpenSearch container | Configured OpenSearch endpoint (`OPENSEARCH_URL`); production template expects an external endpoint |
+| Cache and queue | Optional local Redis; in-memory cache works when Redis is unavailable | Redis service(s) when `REDIS_URL` / `CACHE_REDIS_URL` / `QUEUE_REDIS_URL` are set; queue worker is enabled with `USE_ARQ_QUEUE=true` |
+| Resume and JD files | Local `uploads/` filesystem | Neon S3-compatible Object Storage (`OBJECT_STORAGE_BACKEND=neon`) |
+| Embeddings | Local `fastembed` model (`EMBEDDING_PROVIDER=local`) | Same local model by default; no separate embedding API is required |
+| Chat / generation | Configured OpenAI-compatible vLLM endpoint and optional configured fallback providers | Configured OpenAI-compatible vLLM endpoint and optional configured fallback providers |
+
+The production template documents production integrations; actual service
+availability and values are controlled by hosting dashboards and secret stores.
+Never point development or CI at production databases, vector collections, or
+object storage. The Compose stack is for local development/integration testing and
+defaults to `APP_ENV=development` with local PostgreSQL, Redis, OpenSearch, and
+Qdrant. Use separate production infrastructure and credentials for deployment.
+
+### Development and testing
+
+Copy `.env.example` to `.env` and configure local service URLs. For the full local
+container stack, run `docker compose up --build -d`; use `docker compose down` to
+stop it. For host-based backend development, start PostgreSQL, Redis (optional),
+OpenSearch, and Qdrant, then run the backend and Vite commands below. CI sets
+`APP_ENV=test` and uses its own test services.
+
+### Production setup
+
+Use `.env.production.example` as the production environment checklist; do not
+commit a populated `.env.production`. Configure variables in the hosting provider's
+secret/environment settings. Deploy frontend and backend as separate services (or
+use the Docker stack behind a production ingress), point them only at production
+managed services, and set `CORS_ORIGINS` to the exact frontend origin.
+
 ## Quickstart with Docker (Recommended)
 
-To run the application stack (Frontend, Backend, PostgreSQL, Redis, and OpenSearch) in containers:
+To run the application stack (Frontend, Backend, PostgreSQL, Redis, OpenSearch, and Qdrant) in containers:
 
-`ash
-# 1. Configure environment
-cp .env.docker.example .env
-# Configure the DGX/vLLM endpoint and start the Tailscale SSH tunnel first.
-./start-dgx-tunnel.sh
-
-# 2. Start all services
+```bash
+# Configure development settings and start local services
+cp .env.example .env
 docker compose up --build -d
-`
+```
 
 Open http://localhost:3999 in your browser.
 For complete Docker details and troubleshooting, see [DOCKER.md](DOCKER.md).
