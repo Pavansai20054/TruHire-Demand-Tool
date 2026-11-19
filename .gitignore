@@ -62,3 +62,5 @@ command.md
 # Sample resumes (personal data) are kept locally, not in the repo
 Resumes_*/
 .neon
+
+docs/
