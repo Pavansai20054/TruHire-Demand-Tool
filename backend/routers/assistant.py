@@ -2,7 +2,7 @@ import json
 import logging
 import re
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
@@ -10,9 +10,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from backend.auth import get_current_user
-from backend.database import SessionLocal, get_db
+from backend.database import get_db
 from backend.models import INACTIVE_JD_STATUSES, LEGACY_JD_STATUS_ALIASES, Candidate, Conversation, ConversationMessage, Position, User
 from backend.routers import assistant_demand
+from backend.services.common.demand_fields import parse_lenient_date
 from backend.services.candidates.directory import filter_directory
 from backend.services.common.payloads import candidate_payload
 from backend.routers.ingestion import process_batch
@@ -297,35 +298,91 @@ def _demand_count_action(db: Session, message: str) -> Optional[tuple]:
                    "requirements": [{"id": p.id, "display_id": p.display_id, "title": p.title} for p in matches]}
 
 
+def _extract_date_range(text: str) -> Tuple[Optional[str], Optional[str]]:
+    """Extract start and end date when expressed as a range, e.g.
+    'Duration: 01/12/2026 to 31/03/2027' or 'Period: 1st Dec 2026 - 31st March 2027'."""
+    range_pat = re.compile(
+        r"\b(?:duration|period|contract(?:\s+period)?|tenure|timeline|from)\s*[:\-]?\s*([A-Za-z0-9,./ -]+?)\s*(?:to|till|until|-|–)\s*([A-Za-z0-9,./ -]+)",
+        re.I
+    )
+    for match in range_pat.finditer(text or ""):
+        start_raw, end_raw = match.group(1).strip(), match.group(2).strip()
+        start_d = parse_lenient_date(start_raw)
+        end_d = parse_lenient_date(end_raw)
+        if start_d or end_d:
+            return (start_d.isoformat() if start_d else None, end_d.isoformat() if end_d else None)
+    return None, None
+
+
+def _extract_labeled_date(text: str, label_pattern: str) -> Optional[str]:
+    token = r"(\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}(?:st|nd|rd|th)?[-/.\s]+[A-Za-z]{3,9}[-/.\s]+\d{2,4}|[A-Za-z]{3,9}[-/.\s]+\d{1,2}(?:st|nd|rd|th)?(?:,)?[-/.\s]+\d{2,4}|\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}|[A-Za-z]{3,9}\s+\d{4})"
+    match = re.search(rf"\b(?:{label_pattern})\b\s*(?:is|on|:|=|-)?\s*{token}", text or "", re.I)
+    if not match:
+        return None
+    raw = match.group(1).strip()
+    parsed = parse_lenient_date(raw)
+    return parsed.isoformat() if parsed else None
+
+
 def _jd_field_report(title: str, text: str) -> dict:
-    """Extract only values stated in the JD and explicitly list fields that were not found."""
+    """Extract demand values from the JD semantically via LLM and fallback to heuristic patterns."""
+    sem: Dict[str, Any] = {}
+    try:
+        from backend.services.llm.ai_service import llm_extract_demand_fields
+        sem = llm_extract_demand_fields(title or "", text or "") or {}
+    except Exception as exc:
+        logger.info("Semantic demand extraction fallback to heuristics: %s", exc)
+
     filters = extract_jd_filters(title or "", text or "")
     exp = [float(value) for value in YEARS_EXP_PATTERN.findall(text or "")]
     exp_range = re.search(r"\b(\d+(?:\.\d+)?)\s*(?:-|to)\s*(\d+(?:\.\d+)?)\s*(?:years?|yrs?)\b", text or "", re.I)
-    stated_count = re.search(r"\b(\d{1,4})\s+(?:openings?|positions?|vacanc(?:y|ies)|resources?)\b", text or "", re.I)
+    stated_count_m = (re.search(r"\b(?:openings?|positions?|vacanc(?:y|ies)|resources?|no\.?\s*(?:of)?\s*(?:positions?|openings?))\s*[:\-]\s*(\d{1,3})\b", text or "", re.I) or
+                      re.search(r"(?<!\d)(?!19\d\d|20\d\d)([1-9]\d{0,2})[ \t]+(?:openings?|positions?|vacanc(?:y|ies)|resources?)\b", text or "", re.I))
+    stated_count = int(stated_count_m.group(1)) if stated_count_m else None
     stated_client = re.search(r"\b(?:client|customer)(?:\s+name)?\s*[:\-]\s*([^\n,;]{2,100})", text or "", re.I)
-    start_date = _extract_labeled_date(text, r"start(?:ing)?\s+date|joining\s+date")
-    end_date = _extract_labeled_date(text, r"(?:tentative\s+)?end\s+date|contract\s+end|assignment\s+end")
-    stated_role = filters.get("role") if (filters.get("sources") or {}).get("role") == "jd_text" else None
-    skill_section = re.search(
-        r"(?:required\s+skills?|technical\s+skills?|skills\s*(?:and\s*qualifications)?|qualifications?|requirements?)\s*[:\-]?\s*\n(.*?)(?=\n\s*(?:[A-Z][A-Z /&-]{2,}|responsibilities|what you will|about the role)\s*[:\-]?\s*$|\Z)",
-        text or "", re.I | re.S,
-    )
-    skill_lines = []
-    if skill_section:
-        chunks = re.split(r"[,;\n•]+", skill_section.group(1))
-        for chunk in chunks:
-            cleaned = re.sub(r"^\s*[-*•\d.)]+\s*", "", chunk).strip(" \t,;•.")
-            if cleaned and len(cleaned) <= 70 and len(skill_lines) < 12:
-                skill_lines.append(cleaned)
+    
+    # Date extraction: labeled dates + date ranges
+    range_start, range_end = _extract_date_range(text)
+    start_label_pattern = r"start(?:ing)?(?:\s+date)?|target\s+start(?:\s+date)?|expected\s+start(?:\s+date)?|project\s+start(?:\s+date)?|tenative\s+start(?:\s+date)?|tentative\s+start(?:\s+date)?|joining(?:\s+date)?|commencement(?:\s+date)?|onboarding(?:\s+date)?|start\s*[:\-]"
+    end_label_pattern = r"(?:tentative\s+|tenative\s+|target\s+|expected\s+|contract\s+|assignment\s+|project\s+)?end(?:\s+date)?|completion(?:\s+date)?|target\s+completion|tenative\s+end|contract\s+end|assignment\s+end|end\s*[:\-]"
+    heur_start_date = _extract_labeled_date(text, start_label_pattern) or range_start
+    heur_end_date = _extract_labeled_date(text, end_label_pattern) or range_end
+
+    # Merge semantic and heuristic
+    start_date = sem.get("start_date") or heur_start_date
+    end_date = sem.get("end_date") or heur_end_date
+    client_name = sem.get("client_name") or (stated_client.group(1).strip() if stated_client else None)
+    stated_role = sem.get("role") or (filters.get("role") if (filters.get("sources") or {}).get("role") == "jd_text" else None) or (title if title else None)
+    position_count = sem.get("no_of_positions") or stated_count
+    
+    exp_min = sem.get("experience_years") if sem.get("experience_years") is not None else (float(exp_range.group(1)) if exp_range else (min(exp) if exp else None))
+    exp_max = sem.get("experience_max_years") if sem.get("experience_max_years") is not None else (float(exp_range.group(2)) if exp_range else None)
+    
+    locations = sem.get("locations") or ([part.strip() for part in re.split(r"[,;|]", filters.get("location") or "") if part.strip()] or None)
+    location_str = ", ".join(locations) if locations else filters.get("location")
+    work_mode = sem.get("work_mode") or filters.get("work_mode")
+
+    skill_lines = sem.get("skills") or []
+    if not skill_lines:
+        skill_section = re.search(
+            r"(?:required\s+skills?|technical\s+skills?|skills\s*(?:and\s*qualifications)?|qualifications?|requirements?)\s*[:\-]?\s*\n(.*?)(?=\n\s*(?:[A-Z][A-Z /&-]{2,}|responsibilities|what you will|about the role)\s*[:\-]?\s*$|\Z)",
+            text or "", re.I | re.S,
+        )
+        if skill_section:
+            chunks = re.split(r"[,;\n•]+", skill_section.group(1))
+            for chunk in chunks:
+                cleaned = re.sub(r"^\s*[-*•\d.)]+\s*", "", chunk).strip(" \t,;•.")
+                if cleaned and len(cleaned) <= 70 and len(skill_lines) < 12:
+                    skill_lines.append(cleaned)
+
     fields = {
         "Job title": stated_role,
-        "Client": stated_client.group(1).strip() if stated_client else None,
-        "Location": filters.get("location"),
-        "Experience": (f"{float(exp_range.group(1)):g}-{float(exp_range.group(2)):g} years" if exp_range else f"{max(exp):g}+ years" if exp else None),
-        "Maximum experience": float(exp_range.group(2)) if exp_range else None,
-        "Work mode": filters.get("work_mode"),
-        "Number of positions": int(stated_count.group(1)) if stated_count else None,
+        "Client": client_name,
+        "Location": location_str,
+        "Experience": (f"{exp_min:g}-{exp_max:g} years" if exp_min is not None and exp_max is not None else f"{exp_min:g}+ years" if exp_min is not None else None),
+        "Maximum experience": exp_max,
+        "Work mode": work_mode,
+        "Number of positions": position_count,
         "Skills / qualifications": ", ".join(skill_lines) if skill_lines else None,
         "Start date": start_date,
         "End date": end_date,
@@ -335,32 +392,17 @@ def _jd_field_report(title: str, text: str) -> dict:
     values = {
         "role": stated_role,
         "title": stated_role,
-        "client_name": fields["Client"],
-        "location": fields["Location"],
-        "locations": [part.strip() for part in re.split(r"[,;|]", fields["Location"] or "") if part.strip()],
-        "experience_years": float(exp_range.group(1)) if exp_range else (min(exp) if exp else None),
-        "experience_max_years": float(exp_range.group(2)) if exp_range else None,
-        "position_count": fields["Number of positions"],
-        "work_mode": fields["Work mode"],
+        "client_name": client_name,
+        "location": location_str,
+        "locations": locations or [],
+        "experience_years": exp_min,
+        "experience_max_years": exp_max,
+        "position_count": position_count,
+        "work_mode": work_mode,
         "start_date": start_date,
         "end_date": end_date,
     }
     return {"present": present, "missing": missing, "values": values}
-
-
-def _extract_labeled_date(text: str, label_pattern: str) -> Optional[str]:
-    token = r"(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|[A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4}|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4})"
-    match = re.search(rf"\b(?:{label_pattern})\b\s*(?:is|on|:|=|-)?\s*{token}", text or "", re.I)
-    if not match:
-        return None
-    raw = match.group(1).strip()
-    for fmt in ("%Y-%m-%d", "%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d/%m/%y", "%d-%m-%y",
-                "%b %d, %Y", "%B %d, %Y", "%b %d %Y", "%B %d %Y", "%d %b %Y", "%d %B %Y"):
-        try:
-            return datetime.strptime(raw, fmt).date().isoformat()
-        except ValueError:
-            continue
-    return None
 
 
 def _field_request(text: str) -> bool:

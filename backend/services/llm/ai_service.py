@@ -2,7 +2,7 @@ import contextlib
 import logging
 import json
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from backend.config import settings
 from backend.services.common.ai_audit import ai_feature
 from backend.services.ingestion.pii import redact_pii
@@ -217,6 +217,103 @@ work_mode ("remote", "hybrid" or "onsite" only if the JD explicitly says so, oth
         }
     except Exception as exc:
         logger.warning(f"LLM JD filter extraction failed: {exc}")
+        return None
+
+
+def llm_extract_demand_fields(title: str, jd_text: str) -> Optional[Dict[str, Any]]:
+    """Semantically extract all demand fields from a JD or pasted text, including dates, experience,
+    positions, client, locations, and skills. Dates are parsed into ISO YYYY-MM-DD. None on failure."""
+    from backend.services.common.demand_fields import parse_lenient_date
+    safe_jd = redact_pii(jd_text)
+    prompt = f"""Read this demand / job description and semantically extract the hiring details.
+Return valid JSON only with exactly these keys:
+- "title": Job title / role being hired for (without company name or requisition IDs, "" if unclear)
+- "client_name": Client or customer company name (e.g. Infosys, Coforge, NTT Data, Cretera, etc.; "" if not specified)
+- "experience_years": Minimum experience in years as a number (e.g. 5, or null if unstated)
+- "experience_max_years": Maximum experience in years as a number (e.g. 8, or null if unstated)
+- "locations": List of locations/cities explicitly mentioned (e.g. ["Bangalore"], or empty list [])
+- "no_of_positions": Number of positions/openings/vacancies as an integer (e.g. 3, or null if unstated)
+- "start_date": Target/expected/joining start date in YYYY-MM-DD format (or written date if unformatted, null if not stated)
+- "end_date": Tentative/target/contract end date in YYYY-MM-DD format (or written date if unformatted, null if not stated)
+- "work_mode": "remote", "hybrid", or "onsite" if stated, otherwise ""
+- "skills": List of top technical skills explicitly required (up to 12)
+
+{untrusted("demand_title", title[:200])}
+{untrusted("demand_text", safe_jd[:6000])}"""
+    try:
+        with ai_feature("demand_extraction"):
+            result = chat_completion([
+                _system("You are an expert recruiter and precise hiring requirements extractor. Return JSON only with no markdown or reasoning."),
+                {"role": "user", "content": prompt}
+            ], temperature=0.0, max_tokens=400, enable_thinking=False)
+        data = _json_from_response(result)
+        if not isinstance(data, dict):
+            return None
+
+        # Clean and validate dates
+        start_d = parse_lenient_date(data.get("start_date"))
+        end_d = parse_lenient_date(data.get("end_date"))
+
+        # Clean experience
+        min_exp = data.get("experience_years")
+        try:
+            min_exp = float(min_exp) if min_exp is not None and str(min_exp).strip() != "" else None
+        except (ValueError, TypeError):
+            min_exp = None
+
+        max_exp = data.get("experience_max_years")
+        try:
+            max_exp = float(max_exp) if max_exp is not None and str(max_exp).strip() != "" else None
+        except (ValueError, TypeError):
+            max_exp = None
+
+        # Clean positions
+        positions = data.get("no_of_positions")
+        try:
+            positions = int(positions) if positions is not None and str(positions).strip() != "" else None
+        except (ValueError, TypeError):
+            positions = None
+
+        # Clean locations
+        raw_locs = data.get("locations")
+        clean_locs = []
+        if isinstance(raw_locs, list):
+            for l in raw_locs:
+                c = _clean_location(l)
+                if c and c not in clean_locs:
+                    clean_locs.append(c)
+        elif isinstance(raw_locs, str) and raw_locs.strip():
+            c = _clean_location(raw_locs)
+            if c:
+                clean_locs.append(c)
+
+        # Clean mode
+        mode = str(data.get("work_mode") or "").strip().lower()
+        if mode not in ("remote", "hybrid", "onsite"):
+            mode = ""
+
+        # Clean client name
+        client = str(data.get("client_name") or "").strip()
+        if _SUSPICIOUS_FIELD.search(client) or len(client) > 100:
+            client = ""
+
+        role = (_clean_job_titles([data.get("title")]) or [""])[0]
+
+        return {
+            "title": role or None,
+            "role": role or None,
+            "client_name": client or None,
+            "experience_years": min_exp,
+            "experience_max_years": max_exp,
+            "locations": clean_locs or None,
+            "no_of_positions": positions,
+            "start_date": start_d.isoformat() if start_d else None,
+            "end_date": end_d.isoformat() if end_d else None,
+            "work_mode": mode or None,
+            "skills": _clean_skills(data.get("skills")),
+        }
+    except Exception as exc:
+        logger.warning(f"LLM demand fields extraction failed: {exc}")
         return None
 
 

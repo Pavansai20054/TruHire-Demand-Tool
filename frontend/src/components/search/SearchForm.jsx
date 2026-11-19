@@ -1,125 +1,71 @@
-import { Link } from 'react-router-dom';
+import React from 'react';
 import { Search, X } from 'lucide-react';
-import CategoryRow from '../CategoryRow';
-import TagInput from '../ui/TagInput';
-import { filterJdChoices, jdsInCategory, topNOptions } from '../../lib/categories';
-import { TOP_N_PRESETS } from '../../config/env';
-import { COPY } from '../../config/copy';
-import { useMeta } from '../../context/MetaContext';
 import './search.css';
 
-// The search console: keywords, an optional category and requirement, then the narrowing filters.
-export default function SearchForm({ s }) {
-  const { search: limits } = useMeta();
+export default function SearchForm({ s, onToggleFilters }) {
   const category = s.demands.find((d) => d.id === s.categoryId);
-  const inCategory = jdsInCategory(s.jds, s.categoryId);
-  // The search bar text also finds demands by title or ID; keywords that match no demand simply don't narrow the list.
-  const byText = filterJdChoices(inCategory, { text: s.query, positions: s.positions, selectedId: s.jdId });
-  const choices = byText.length || !s.query.trim() ? byText : filterJdChoices(inCategory, { positions: s.positions, selectedId: s.jdId });
-  const narrowed = !!(s.query.trim() || s.positions !== '');
-  const suggested = s.jdFilterInfo?.locations?.length ? s.jdFilterInfo.locations : s.jdFilterInfo?.location ? [s.jdFilterInfo.location] : [];
-  const sameAsSuggested = suggested.length > 0 && suggested.length === s.locations.length && suggested.every((p, i) => p === s.locations[i]);
 
   return (
-    <form className="search-form" onSubmit={(e) => { e.preventDefault(); s.run(); }}>
+    <form className="search-form" onSubmit={(e) => { e.preventDefault(); s.run(); }} style={{ borderBottom: 'none', padding: '0.5rem 0 1rem' }}>
+      {/* Top Search Bar */}
       <div className="search-bar">
         <label className="search-input">
-          <Search size={17} aria-hidden="true" />
+          <Search size={18} aria-hidden="true" />
           <span className="sr-only">Keywords</span>
-          <input type="text" value={s.query} onChange={(e) => s.setQuery(e.target.value)}
-            placeholder="Skills, role, demand title or ID, or a candidate’s name, email, phone or company" />
+          <input
+            type="text"
+            value={s.query}
+            onChange={(e) => s.setQuery(e.target.value)}
+            placeholder="Search by skills, role, company or free text..."
+          />
         </label>
-        <button type="submit" className="btn btn-primary" disabled={s.loading}>{s.loading ? 'Searching…' : 'Search'}</button>
+        <button type="submit" className="btn btn-primary" disabled={s.loading} style={{ minWidth: '6.5rem' }}>
+          {s.loading ? 'Searching…' : 'Search'}
+        </button>
       </div>
 
-      <div className="search-scope">
-        <CategoryRow demands={s.demands} activeId={s.categoryId || null} onSelect={s.selectCategory} label="Search within category" />
-        <label className="search-field">
-          <span className="input-label">Requirement</span>
-          <select className="input-field" value={s.jdId} onChange={(e) => s.selectJd(e.target.value)}>
-            <option value="">{s.categoryId ? `Any ${category?.name || 'category'} requirement (keywords only)` : 'No requirement (keywords only)'}</option>
-            {choices.map((jd) => (
-              <option key={jd.id} value={jd.id}>{jd.display_id || 'No ID'} - {jd.client_name?.trim() || 'No client'} - {jd.title}</option>
-            ))}
-          </select>
-        </label>
-        {narrowed && inCategory.length > 0 && choices.length === 0 && <p className="dek">No demand has that number of positions.</p>}
-        {s.categoryId && inCategory.length === 0 && (
-          <p className="dek">
-            {category?.name || 'This category'} has no requirements yet.{' '}
-            <Link to={`/requirements?demand=${s.categoryId}`}>Open it in Requirements</Link>
-          </p>
+      {/* Quick Filter Chips Row */}
+      <div className="search-chips-row">
+        {s.categoryId && category && (
+          <span className="search-filter-chip">
+            {category.name}
+            <button type="button" onClick={() => s.selectCategory('')} aria-label={`Remove ${category.name} filter`}>
+              <X size={13} />
+            </button>
+          </span>
         )}
-      </div>
-
-      <div className="search-filters">
-        <label className="search-field">
-          <span className="input-label">Client requirements</span>
-          <select className="input-field" value={s.clientName} onChange={(e) => s.setClientName(e.target.value)}>
-            <option value="">Any client</option>
-            {s.clientNames.map((name) => <option key={name} value={name}>{name}</option>)}
-          </select>
-        </label>
-        <label className="search-field">
-          <span className="input-label">Minimum years</span>
-          <input className="input-field" type="number" min="0" step="0.5" value={s.minExp} onChange={(e) => s.setMinExp(e.target.value)} />
-        </label>
-        <label className="search-field">
-          <span className="input-label">No. of pos.</span>
-          <input className="input-field" type="number" min="1" step="1" value={s.positions} onChange={(e) => s.setPositions(e.target.value)} aria-label="No. of positions" />
-        </label>
-        <label className="search-field">
-          <span className="input-label">Show top</span>
-          <select className="input-field" value={s.topN} onChange={(e) => s.setTopN(e.target.value)}>
-            {topNOptions(limits, TOP_N_PRESETS).map((n) => <option key={n} value={n}>{n}{n === limits.max_top_n ? ' (max)' : ''}</option>)}
-          </select>
-        </label>
-        <label className="search-field">
-          <span className="input-label">
-            Job title
-            {s.jdFilterInfo?.role && s.role === s.jdFilterInfo.role && <span className="slug"> · from requirement</span>}
+        {s.minExp && (
+          <span className="search-filter-chip">
+            {s.minExp}+ years
+            <button type="button" onClick={() => s.setMinExp('')} aria-label="Remove min experience filter">
+              <X size={13} />
+            </button>
           </span>
-          <input className="input-field" maxLength={100} value={s.role} onChange={(e) => s.setRole(e.target.value)} placeholder={COPY.searchPlaceholders.role} />
-        </label>
-        <label className="search-field">
-          <span className="input-label">
-            Locations <span className="slug">(any of)</span>
-            {sameAsSuggested && <span className="slug"> · from requirement</span>}
-            {s.jdFilterInfo?.work_mode && <span className="slug"> · {s.jdFilterInfo.work_mode}</span>}
+        )}
+        {s.locations.map((loc) => (
+          <span key={loc} className="search-filter-chip">
+            {loc}
+            <button type="button" onClick={() => s.setLocations(s.locations.filter((l) => l !== loc))} aria-label={`Remove ${loc} filter`}>
+              <X size={13} />
+            </button>
           </span>
-          <TagInput values={s.locations} onChange={s.setLocations} maxItems={10} maxLength={100} itemLabel="location"
-            ariaLabel="Locations" placeholder={COPY.searchPlaceholders.location} />
-        </label>
-      </div>
-
-      {s.jdFilterInfo && (s.jdFilterInfo.role || suggested.length > 0) && (
-        <p className="dek search-suggest">
-          Suggested:
-          {s.jdFilterInfo.role && s.role !== s.jdFilterInfo.role && (
-            <button type="button" className="link-btn" onClick={() => s.setRole(s.jdFilterInfo.role)}>Title: {s.jdFilterInfo.role}</button>
-          )}
-          {suggested.length > 0 && !sameAsSuggested && (
-            <button type="button" className="link-btn" onClick={() => s.setLocations(suggested)}>Locations: {suggested.join(', ')}</button>
-          )}
-        </p>
-      )}
-
-      <div className="search-active cluster cluster-between">
-        <span className="cluster cluster-tight" aria-label="Active filters">
-          {s.chips.map((chip) => (
-            <span key={chip} className="chip">
-              {chip}
-              <button type="button" className="chip-remove" onClick={() => s.removeChip(chip)} aria-label={`Remove ${chip}`}><X size={12} /></button>
-            </span>
-          ))}
-          {s.role.trim() && <span className="chip" title="Only candidates with this job title">Title: {s.role.trim()}</span>}
-          {s.locations.length > 0 && <span className="chip" title="Only candidates who state one of these locations">Locations: {s.locations.join(' or ')}</span>}
-          
-        </span>
-        <span className="cluster cluster-tight">
-          {(s.role.trim() || s.locations.length > 0) && <button type="button" className="link-btn" onClick={s.clearRoleLocation}>Clear title and location</button>}
-          <button type="button" className="btn btn-secondary btn-compact" onClick={s.reset}>Reset</button>
-        </span>
+        ))}
+        {s.role && (
+          <span className="search-filter-chip">
+            {s.role}
+            <button type="button" onClick={() => s.setRole('')} aria-label="Remove role filter">
+              <X size={13} />
+            </button>
+          </span>
+        )}
+        <button
+          type="button"
+          className="search-filter-chip-add"
+          onClick={onToggleFilters}
+          title="Toggle search filters"
+        >
+          + Add filter
+        </button>
       </div>
     </form>
   );

@@ -7,7 +7,6 @@ assistant can never accept a value the New Demand page or the API would reject.
 The form's Demand Status field is not offered in chat: a new demand starts as Open, and the other statuses need
 a cancellation reason or linked resumes, which are set on the requirement itself.
 """
-from __future__ import annotations
 
 import re
 from datetime import date, datetime
@@ -68,15 +67,44 @@ def field_definitions(db: Session) -> List[Dict[str, Any]]:
     return out
 
 
-def _parse_date(raw: Any) -> date:
-    if isinstance(raw, date):
-        return raw
+def parse_lenient_date(raw: Any) -> Optional[date]:
+    """Parse a date from many string formats including ordinals ('1st', '31st'),
+    slashes, dashes, dots, and written month names. Returns a datetime.date or None."""
+    if not raw:
+        return None
+    if isinstance(raw, (date, datetime)):
+        return raw if isinstance(raw, date) else raw.date()
     text = str(raw).strip()
-    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%b %d, %Y", "%B %d, %Y", "%d %b %Y", "%d %B %Y", "%b %d %Y", "%B %d %Y"):
+    if not text:
+        return None
+    # Strip ordinal suffixes: 1st, 2nd, 3rd, 4th, 31st
+    cleaned = re.sub(r"(\d+)(st|nd|rd|th)\b", r"\1", text, flags=re.I)
+    cleaned = re.sub(r"[,\.]", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+
+    formats = (
+        "%Y-%m-%d", "%Y/%m/%d",
+        "%d/%m/%Y", "%d-%m-%Y", "%d %m %Y",
+        "%d/%m/%y", "%d-%m-%y",
+        "%m/%d/%Y", "%m-%d-%Y",
+        "%d %b %Y", "%d %B %Y",
+        "%b %d %Y", "%B %d %Y",
+        "%d-%b-%Y", "%d-%B-%Y",
+        "%d-%b-%y", "%d-%B-%y",
+        "%b %Y", "%B %Y", "%m/%Y", "%m-%Y", "%Y-%m", "%Y/%m"
+    )
+    for fmt in formats:
         try:
-            return datetime.strptime(text, fmt).date()
+            return datetime.strptime(cleaned, fmt).date()
         except ValueError:
-            continue
+            pass
+    return None
+
+
+def _parse_date(raw: Any) -> date:
+    parsed = parse_lenient_date(raw)
+    if parsed:
+        return parsed
     raise ValueError("Enter a valid date, for example 2026-11-15.")
 
 

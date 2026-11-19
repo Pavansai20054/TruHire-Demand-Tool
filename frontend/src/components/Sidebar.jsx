@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom';
 import { UploadCloud, FileText, Search, BarChart3, Mail, ShieldCheck, Users, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { isAdmin } from '../lib/review';
+import Logo from './Logo';
 
 // Ingestion History lives inside the Ingestion section (/ingestion/history), so "Ingestion"
 // matches its sub-routes (end: false) and stays highlighted there.
@@ -26,6 +27,7 @@ export default function Sidebar({ collapsed = false, onToggle }) {
       aria-label="Main navigation"
     >
       <div className="sidebar-head">
+        <Logo />
         <button
           type="button"
           onClick={onToggle}

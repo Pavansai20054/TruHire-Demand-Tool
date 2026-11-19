@@ -19,7 +19,6 @@ Embeddings are not routed here; they use local_embeddings.py.
 chat_completion returns the whole reply; chat_completion_stream yields it in pieces as it is written;
 chat_with_tools returns one assistant message that may ask for tool calls (used by the assistant agent).
 """
-from __future__ import annotations
 
 import logging
 import threading

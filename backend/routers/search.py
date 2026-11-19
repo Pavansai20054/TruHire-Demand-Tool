@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field, field_validator
 from backend.database import get_db
 from backend.models import User, SearchState
 from backend.auth import get_current_user
-from backend.services.retrieval.search import CategoryNotFound, RequirementRequired, parse_search_query, execute_candidate_search
+from backend.services.retrieval.search import CategoryNotFound, RequirementNotFound, parse_search_query, execute_candidate_search
 from backend.services.retrieval.filters import MAX_FILTER_CHARS, MAX_LOCATION_FILTERS, clean_filter_text
 from backend.services.retrieval.client_search import list_client_names, search_client_requirements
 
@@ -95,7 +95,7 @@ def search_candidates_endpoint(req: SearchRequest, db=Depends(get_db), user: Use
             result = execute_candidate_search(db, clean_query, skills, min_exp, req.position_id, req.top_n or 20, places or None, req.role, req.demand_id)
     except CategoryNotFound:
         raise HTTPException(status_code=404, detail="Category not found.") from None
-    except RequirementRequired:
+    except RequirementNotFound:
         raise HTTPException(status_code=404, detail="Requirement not found.") from None
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

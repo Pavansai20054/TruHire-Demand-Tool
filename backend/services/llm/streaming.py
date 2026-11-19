@@ -1,5 +1,4 @@
 """Server-sent-events plumbing shared by the vLLM and cloud streaming chat calls."""
-from __future__ import annotations
 
 import json
 from typing import Iterator

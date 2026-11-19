@@ -1,5 +1,4 @@
 """Run ranking-quality metrics over a protected, human-judged JSONL dataset."""
-from __future__ import annotations
 
 import json
 import time

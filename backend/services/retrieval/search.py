@@ -151,7 +151,7 @@ class RequirementNotFound(ValueError):
     """A position_id was supplied but does not exist."""
 
 
-RequirementRequired = RequirementNotFound  # backwards-compatible alias
+
 
 
 class CategoryNotFound(ValueError):

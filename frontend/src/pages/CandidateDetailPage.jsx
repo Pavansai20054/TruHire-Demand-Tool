@@ -21,8 +21,8 @@ import { formatIst } from '../lib/datetime';
 export default function CandidateDetailPage() {
   const { id } = useParams();
   const { requirement_statuses: requirementStatuses } = useMeta();
-  // Back returns to wherever the profile was opened from (Search, Requirements, Ingestion History).
-  const { goBack, backLabel } = useBackNavigation('/search', 'Search');
+  // Back returns to wherever the profile was opened from (Candidate History, Search, Requirements, Ingestion, etc.).
+  const { goBack, backLabel } = useBackNavigation('/candidate-history', 'Candidate History');
   const [candidate, setCandidate] = useState(null);
   const [matches, setMatches] = useState([]);
   const [history, setHistory] = useState([]);

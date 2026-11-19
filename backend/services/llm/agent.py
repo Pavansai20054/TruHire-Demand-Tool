@@ -8,7 +8,6 @@ The model decides which tool to call; every tool reuses the code the REST endpoi
 Memory without a new table: a per-user conversation titled MEMORY_TITLE holds one ``memory`` message whose
 message_data keeps short notes the user asked to remember and the candidate/demand last talked about.
 """
-from __future__ import annotations
 
 import json
 import logging

@@ -1,5 +1,4 @@
 """The cloud chat providers used when the DGX/vLLM box is unavailable, in fallback order."""
-from __future__ import annotations
 
 from backend.services.llm.providers._openai_compat import CloudProvider
 

@@ -5,7 +5,6 @@ strongest sign of a resume, section headings like "Responsibilities" the stronge
 A demand document is still confirmed by the recruiter (category pick) before anything is created,
 so a rare wrong guess is caught at that step.
 """
-from __future__ import annotations
 
 import re
 from typing import List, Tuple

@@ -3,7 +3,6 @@
 Usage: python -m backend.evaluation.cli path/to/judgments.jsonl
 The input should be access-controlled and contain IDs and grades only, never resume content.
 """
-from __future__ import annotations
 
 import argparse
 import json

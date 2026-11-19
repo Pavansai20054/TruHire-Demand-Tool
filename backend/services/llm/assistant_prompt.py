@@ -3,7 +3,6 @@
 Keep model behavior instructions here. Request-specific database records are appended as
 untrusted context and the user's actual message remains a normal user-role turn.
 """
-from __future__ import annotations
 
 import json
 from typing import Any

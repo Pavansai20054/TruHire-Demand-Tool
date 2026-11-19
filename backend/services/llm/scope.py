@@ -6,7 +6,6 @@ Two layers, both cheap:
   2. SCOPE_RULE: added to the system prompt for everything that passes layer 1, so the model refuses
      the off-topic request that slips through (e.g. a recruitment word used as cover).
 """
-from __future__ import annotations
 
 import re
 from typing import Iterable

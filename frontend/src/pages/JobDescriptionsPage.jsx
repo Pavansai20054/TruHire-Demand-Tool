@@ -13,6 +13,7 @@ import JdTable from '../components/requirements/JdTable';
 import RequirementHistory from '../components/requirements/RequirementHistory';
 import RequirementEditor from '../components/requirements/RequirementEditor';
 import RequirementMatches from '../components/requirements/RequirementMatches';
+import RequirementDrawer from '../components/requirements/RequirementDrawer';
 import { DeleteRequirementModal, EmailShortlistModal } from '../components/requirements/RequirementModals';
 import { UNASSIGNED_CLIENT, inClient, sortByStatus } from '../lib/requirements';
 import '../components/requirements/requirements.css';
@@ -28,6 +29,7 @@ const TABS = (count) => [
 export default function JobDescriptionsPage() {
   const r = useRequirements();
   const [tab, setTab] = useState('details');
+  const [drawerJd, setDrawerJd] = useState(null);
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(null);
   const [emailing, setEmailing] = useState(false);
@@ -48,17 +50,30 @@ export default function JobDescriptionsPage() {
     ...m.candidate, match_score: m.match_score, requirement_status: m.requirement_status, last_email: m.last_email,
   }));
   const shortlisted = forEmail.filter((c) => c.requirement_status === 'Shortlisted');
-  const create = () => { r.startCreate(); setEditing(false); };
-  const duplicate = (source) => { r.startCreate(source); setEditing(false); };
+  const create = () => { r.startCreate(); setEditing(false); setDrawerJd(null); };
+  const duplicate = (source) => { r.startCreate(source); setEditing(false); setDrawerJd(null); };
   const practiceName = (id) => r.demands.find((d) => d.id === id)?.name;
   const toggleView = () => {
     if (jd || r.creating) r.closeJd();
+    setDrawerJd(null);
     setView((v) => (v === 'list' ? 'cards' : 'list'));
   };
   const save = async (payload) => {
     const ok = await r.saveJd(payload);
     if (ok && !r.creating) setEditing(false);
     return ok;
+  };
+
+  const handleOpenCard = (item) => {
+    setDrawerJd(item);
+    r.loadMatches(item.id);
+  };
+
+  const handleOpenFull = (item) => {
+    r.selectJd(item);
+    setDrawerJd(null);
+    setTab('details');
+    setEditing(false);
   };
 
   const crumbs = [{ label: 'Requirements', onClick: () => r.setDemand(null) }];
@@ -205,19 +220,37 @@ export default function JobDescriptionsPage() {
           </>
         ) : byClient || demand ? (
           <>
-            <div className="section-head"><h2>{r.clientName ? clientLabel : demand.name}<span className="slug">{r.clientName ? ` · ${plural(clientJds.length)}` : ` · ${plural(demand.jd_count)}${r.visibleJds.length > demand.jd_count ? ` · ${r.visibleJds.length} including cancelled` : ''}`}</span></h2></div>
-            <JdCards
-              key={`${r.groupBy}-${demand?.id}-${r.clientName}`}
-              jds={r.clientName ? clientJds : r.visibleJds}
-              loading={r.loading}
-              scope={byClient ? 'client' : 'practice'}
-              practiceName={byClient ? practiceName : undefined}
-              onOpen={(item) => { r.selectJd(item); setTab('details'); setEditing(false); }}
-              onDelete={setDeleting}
-              onDuplicate={duplicate}
-              onCreate={create}
-              onUpdateField={r.updateJdFields}
-            />
+            {(demand || r.clientName) && (
+              <div className="section-head">
+                <h2>{r.clientName ? clientLabel : demand.name}
+                  <span className="slug">{r.clientName ? ` · ${plural(clientJds.length)}` : ` · ${plural(demand.jd_count)}${r.visibleJds.length > demand.jd_count ? ` · ${r.visibleJds.length} including cancelled` : ''}`}</span>
+                </h2>
+              </div>
+            )}
+            <div className={drawerJd ? 'req-layout-with-drawer' : undefined}>
+              <JdCards
+                key={`${r.groupBy}-${demand?.id}-${r.clientName}`}
+                jds={r.clientName ? clientJds : r.visibleJds}
+                loading={r.loading}
+                scope={byClient ? 'client' : 'practice'}
+                practiceName={byClient ? practiceName : undefined}
+                onOpen={(item) => handleOpenCard(item)}
+                onDelete={setDeleting}
+                onDuplicate={duplicate}
+                onCreate={create}
+                onUpdateField={r.updateJdFields}
+              />
+              {drawerJd && (
+                <RequirementDrawer
+                  jd={drawerJd}
+                  matches={r.matches}
+                  loading={r.loadingMatches}
+                  onClose={() => setDrawerJd(null)}
+                  onEmail={() => setEmailing(true)}
+                  onOpenFull={handleOpenFull}
+                />
+              )}
+            </div>
           </>
         ) : (
           <DemandCards demands={r.demands} loading={r.loading} onOpen={r.setDemand} onCreate={create} />

@@ -4,7 +4,6 @@ The definitions mirror backend/models.py (Demand, Position, CLIENT_NAMES, JD_STA
 come from the database at request time, so the model never has to guess them. Reads are the same ones the
 Requirements page uses (`GET /api/jds`, `GET /api/demands`): every signed-in user sees every requirement.
 """
-from __future__ import annotations
 
 import re
 from collections import Counter

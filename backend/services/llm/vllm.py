@@ -31,7 +31,6 @@ or:
     EMBEDDING_BASE_URL=http://localhost:8001/v1
     EMBEDDING_MODEL=<real embedding model>
 """
-from __future__ import annotations
 
 import logging
 import time

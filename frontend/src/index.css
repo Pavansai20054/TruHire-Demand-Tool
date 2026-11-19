@@ -9,15 +9,15 @@
   position: sticky;
   top: 0;
   z-index: 40;
-  height: var(--topbar-height);
+  height: 52px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
   padding: 0 1.25rem;
-  background-color: var(--bg-surface);
-  border-bottom: 1px solid var(--border-color);
+  background-color: var(--bg-subtle);
+  border-bottom: 0;
 }
 
 .navbar-left,
@@ -27,6 +27,8 @@
   gap: 0.75rem;
   min-width: 0;
 }
+
+.workspace-context { color: var(--text-muted); font-size: .875rem; font-weight: 600; }
 
 /* Truviq Systems brand mark (black artwork): inverted on the dark theme so it stays visible. */
 .brand-truviq {
@@ -48,10 +50,10 @@
 .logo-mark { flex-shrink: 0; }
 
 .logo-name {
-  font-size: 1.25rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  text-transform: none;
   color: var(--logo-ink);
   white-space: nowrap;
 }
@@ -115,16 +117,15 @@
 .account-item:hover { background-color: var(--bg-subtle); }
 
 .sidebar {
-  --sidebar-width: 260px;
+  --sidebar-width: 248px;
   width: var(--sidebar-width);
-  background-color: var(--bg-surface);
-  border-right: 1px solid var(--border-color);
+  background-color: var(--bg-subtle);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  height: calc(100vh - var(--topbar-height));
+  height: 100vh;
   position: sticky;
-  top: var(--topbar-height);
+  top: 0;
   z-index: 20; /* above page content so collapsed-mode tooltips are not covered */
   transition: width 0.2s ease, transform 0.25s ease, background-color 0.2s ease, border-color 0.2s ease;
 }
@@ -137,12 +138,14 @@
 /* Collapse control: a row of its own directly under the top bar, ruled off from the links. Desktop only. */
 .sidebar-head {
   display: flex;
-  justify-content: flex-end;
-  padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid var(--border-color);
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 1.25rem 1.25rem 1rem;
   flex-shrink: 0;
 }
-.sidebar.collapsed .sidebar-head { justify-content: center; }
+.sidebar.collapsed .sidebar-head { justify-content: center; flex-direction: column; padding-inline: .5rem; }
+.sidebar.collapsed .sidebar-head .logo-name { display: none; }
 
 .icon-btn:hover {
   background-color: var(--bg-subtle);
@@ -156,7 +159,7 @@
 }
 
 .sidebar-nav {
-  padding: 1.25rem 0.75rem;
+  padding: 1.5rem 0.8rem;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -167,9 +170,9 @@
   display: flex;
   align-items: center;
   gap: 0.875rem;
-  padding: 0.75rem 1rem;
-  border-radius: 8px;
-  font-size: 0.875rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 9px;
+  font-size: 0.9375rem;
   font-weight: 500;
   text-decoration: none;
   color: var(--text-muted);
@@ -195,7 +198,7 @@
   font-weight: 700;
   color: var(--primary);
   background-color: var(--primary-light);
-  border-color: var(--primary-border);
+  border-color: transparent;
 }
 
 .sidebar-link:focus-visible,
@@ -215,6 +218,7 @@
   .sidebar.collapsed .sidebar-label {
     display: none;
   }
+.sidebar.collapsed .sidebar-head .logo-mark { width: 30px; height: 27px; }
 
   .sidebar.collapsed .sidebar-nav {
     padding: 1.25rem 0.75rem;
@@ -295,9 +299,12 @@
 /* Layout Utilities */
 .app-container {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   min-height: 100vh;
+  background: var(--bg-app);
 }
+
+.app-workspace { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
 .app-body {
   display: flex;
@@ -311,6 +318,10 @@
   flex-direction: column;
   min-width: 0;
   overflow-x: hidden;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 16px 0 0 0;
+  margin: 0.5rem 0 0 0;
 }
 
 /* Breadcrumbs / Back navigation for subviews */
@@ -413,9 +424,9 @@
 }
 
 .page-body {
-  padding: 2rem;
-  max-width: 1400px;
-  margin: 0 auto;
+  padding: 1.75rem 2rem 2rem;
+  max-width: 1600px;
+  margin: 0;
   width: 100%;
 }
 
@@ -423,9 +434,31 @@
 .card {
   background-color: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
+  border-radius: 12px;
+  box-shadow: none;
   padding: 1.5rem;
+}
+
+@media (min-width: 769px) {
+  .app-workspace { min-height: 100vh; }
+  .main-content { margin: 0 0.5rem 0.5rem 0; border-radius: 16px; }
+}
+
+@media (max-width: 768px) {
+  .app-container { min-height: 100dvh; }
+  .sidebar { --sidebar-width: 68px; }
+  .sidebar:not(.collapsed) { --sidebar-width: 190px; }
+  .sidebar-head { padding: .75rem .4rem; flex-direction: column; }
+  .sidebar:not(.collapsed) .sidebar-head { flex-direction: row; padding: .9rem .7rem; }
+  .sidebar:not(.collapsed) .sidebar-head .logo-name { display: inline; }
+  .sidebar:not(.collapsed) .sidebar-head .logo-mark { width: 27px; height: 24px; }
+  .sidebar.collapsed .sidebar-head .logo-mark { width: 28px; height: 25px; }
+  .sidebar-nav { padding: .75rem .35rem; }
+  .sidebar-link { justify-content: center; padding: .7rem .25rem; }
+  .sidebar:not(.collapsed) .sidebar-link { justify-content: flex-start; padding: .7rem .6rem; }
+  .navbar { height: 52px; }
+  .workspace-context, .brand-truviq { display: none; }
+  .main-content { margin: 0; border-radius: 12px 0 0 0; }
 }
 
 .card-hover:hover {

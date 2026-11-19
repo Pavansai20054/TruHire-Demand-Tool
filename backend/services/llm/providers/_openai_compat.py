@@ -5,7 +5,6 @@ HTTP 429/401/403/5xx on one key moves on to the next key. Keys that just failed 
 cooldown so the next request does not wait on them again, and the first key tried rotates
 round-robin so load is spread across keys.
 """
-from __future__ import annotations
 
 import logging
 import threading

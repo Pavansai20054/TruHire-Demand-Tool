@@ -1,7 +1,6 @@
 import React from 'react';
 import { Moon, Sun } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
-import Logo from './Logo';
 import AccountMenu from './AccountMenu';
 
 // Fixed top bar shown on every page: logo on the left (the collapse arrow sits under it in the sidebar), theme switch and account on the right.
@@ -12,7 +11,7 @@ export default function Navbar() {
   return (
     <header className="navbar">
       <div className="navbar-left">
-        <Logo />
+        <span className="workspace-context">Talent workspace</span>
       </div>
       <div className="navbar-right">
         <img className="brand-truviq" src="/truviq-block-logo.png" alt="Truviq Systems" />

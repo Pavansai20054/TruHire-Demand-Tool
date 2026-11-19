@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy import Column, String, Integer, Float, Text, DateTime, Date, ForeignKey, JSON, UniqueConstraint, Index, Boolean, func
 from sqlalchemy.orm import relationship
@@ -21,7 +21,7 @@ class User(Base):
     name = Column(String, nullable=False)
     hashed_password = Column(String, nullable=False)
     role = Column(String, nullable=True, default=ROLE_RECRUITER)  # NULL on pre-roles rows; treated as recruiter
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     positions = relationship("Position", back_populates="creator")
     batches = relationship("IngestionBatch", back_populates="creator")
     conversations = relationship("Conversation", back_populates="user", cascade="all, delete-orphan")
@@ -50,8 +50,8 @@ class Demand(Base):
     name = Column(String, nullable=False, index=True)
     description = Column(Text, nullable=True)
     created_by = Column(String, ForeignKey("users.id"), nullable=True)  # NULL for system-seeded default demands
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     positions = relationship("Position", back_populates="demand", passive_deletes=True)
 
 
@@ -74,7 +74,7 @@ class Position(Base):
     jd_summary = Column(Text, nullable=True)
     jd_version = Column(Integer, default=1, nullable=False)
     created_by = Column(String, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     file_url = Column(String, nullable=True)
     original_filename = Column(String, nullable=True)
     # Location / role / work mode read from the JD, cached per jd_version so the LLM runs once per edit.
@@ -108,7 +108,7 @@ class IngestionBatch(Base):
     __tablename__ = "ingestion_batches"
     id = Column(String, primary_key=True, default=generate_uuid)
     created_by = Column(String, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     total_files = Column(Integer, default=0)
     processed_count = Column(Integer, default=0)
     failed_count = Column(Integer, default=0)
@@ -120,7 +120,7 @@ class IngestionBatch(Base):
     stage = Column(String, default="queued")
     file_status = Column(JSON, default=list)
     # Set by POST /batches/{id}/cancel; process_batch checks it between files and before indexing.
-    cancel_requested = Column(Boolean, default=False, nullable=True)
+    cancel_requested = Column(Boolean, default=False, nullable=False, server_default="false")
     creator = relationship("User", back_populates="batches")
     candidates = relationship("Candidate", back_populates="batch")
 
@@ -158,7 +158,7 @@ class Candidate(Base):
     notice_period_value = Column(Float, nullable=True)
     notice_period_unit = Column(String, nullable=True)
     uploaded_by = Column(String, ForeignKey("users.id"), nullable=False)
-    uploaded_at = Column(DateTime, default=datetime.utcnow)
+    uploaded_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     ingestion_batch_id = Column(String, ForeignKey("ingestion_batches.id"), nullable=True)
     file_hash = Column(String, nullable=False, index=True)
     original_filename = Column(String, nullable=False)
@@ -179,7 +179,7 @@ class CandidateMatch(Base):
     cited_quote = Column(Text, nullable=True)
     cited_section = Column(Text, nullable=True)
     jd_version = Column(Integer, default=1, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     candidate = relationship("Candidate", back_populates="matches")
     position = relationship("Position", back_populates="matches")
     __table_args__ = (UniqueConstraint("candidate_id", "position_id", name="uq_candidate_position"), Index("idx_candidate_match_score", "position_id", "match_score"))
@@ -201,7 +201,7 @@ class SearchState(Base):
     results = Column(JSON, default=list)
     total_matches = Column(Integer, default=0, nullable=False)
     retrieval = Column(JSON, default=dict)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
 
@@ -212,8 +212,8 @@ class Conversation(Base):
     candidate_id = Column(String, ForeignKey("candidates.id"), nullable=True, index=True)
     position_id = Column(String, ForeignKey("positions.id"), nullable=True, index=True)
     title = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     user = relationship("User", back_populates="conversations")
     messages = relationship("ConversationMessage", back_populates="conversation", cascade="all, delete-orphan", order_by="ConversationMessage.created_at")
     demand_sessions = relationship("AssistantDemandSession", back_populates="conversation", cascade="all, delete-orphan")
@@ -226,7 +226,7 @@ class ConversationMessage(Base):
     role = Column(String, nullable=False)
     content = Column(Text, nullable=False)
     message_data = Column("metadata", JSON, default=dict, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     conversation = relationship("Conversation", back_populates="messages")
 
 
@@ -248,8 +248,8 @@ class AssistantDemandSession(Base):
     errors = Column(JSON, nullable=False, default=dict)  # field -> message from the last failed answer
     source_document = Column(JSON, nullable=True)  # {filename, file_url, notes}
     created_position_id = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     conversation = relationship("Conversation", back_populates="demand_sessions")
 
 
@@ -266,7 +266,7 @@ class RequirementCandidateStatus(Base):
     candidate_id = Column(String, ForeignKey("candidates.id", ondelete="CASCADE"), nullable=False, index=True)
     status = Column(String, nullable=False, default=DEFAULT_REQUIREMENT_STATUS)
     updated_by = Column(String, nullable=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     __table_args__ = (UniqueConstraint("position_id", "candidate_id", name="uq_requirement_candidate_status"),)
 
 
@@ -278,7 +278,7 @@ class CandidateAssignment(Base):
     candidate_id = Column(String, ForeignKey("candidates.id", ondelete="CASCADE"), nullable=False, index=True)
     assignee_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     assigned_by = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     __table_args__ = (UniqueConstraint("position_id", "candidate_id", name="uq_candidate_assignment"),)
 
 
@@ -291,7 +291,7 @@ class CandidateComment(Base):
     author_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     body = Column(Text, nullable=False)
     rating = Column(Integer, nullable=True)  # 1-5, optional
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     edited_at = Column(DateTime, nullable=True)
     author = relationship("User", foreign_keys=[author_id])
 
@@ -302,7 +302,7 @@ class CandidateActivity(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     candidate_id = Column(String, ForeignKey("candidates.id", ondelete="CASCADE"), nullable=False)
     event_type = Column(String, nullable=False)
-    occurred_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    occurred_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), index=True)
     actor_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     actor_name = Column(String, nullable=True)
     position_id = Column(String, nullable=True)
@@ -328,7 +328,7 @@ class RequirementHistory(Base):
     survive deletion of the JD or the user; `changes` maps field -> {old, new} where applicable."""
     __tablename__ = "requirement_history"
     id = Column(String, primary_key=True, default=generate_uuid)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
     action = Column(String, nullable=False, index=True)
     item_type = Column(String, nullable=False, default="jd")  # jd | demand
     source = Column(String, nullable=True)  # requirements UI | assistant | system
@@ -362,8 +362,8 @@ class EmailRecord(Base):
     attempts = Column(Integer, nullable=False, default=1)
     idempotency_key = Column(String, nullable=True, unique=True)
     sent_by = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
 class AIAuditEvent(Base):
@@ -374,7 +374,7 @@ class AIAuditEvent(Base):
     """
     __tablename__ = "ai_audit_events"
     id = Column(String, primary_key=True, default=generate_uuid)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     trace_id = Column(String, nullable=True, index=True)
     user_id = Column(String, nullable=True, index=True)
     feature = Column(String, nullable=False, index=True)

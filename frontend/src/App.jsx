@@ -72,11 +72,13 @@ function ProtectedLayout() {
 
   return (
     <div className="app-container">
-      <Navbar />
-      <div className="app-body">
-        <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
-        <div className="main-content">
-          <Suspense fallback={<div className="page-body" role="status">Loading…</div>}><Outlet /></Suspense>
+      <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
+      <div className="app-workspace">
+        <Navbar />
+        <div className="app-body">
+          <div className="main-content">
+            <Suspense fallback={<div className="page-body" role="status">Loading…</div>}><Outlet /></Suspense>
+          </div>
         </div>
       </div>
       <Suspense fallback={null}><TruHireAssistant /></Suspense>
